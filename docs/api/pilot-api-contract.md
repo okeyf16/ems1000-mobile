@@ -1,7 +1,9 @@
 # 🔌 Pilot API contract — app ↔ EMS-1000 API
 
-> **Status:** DRAFT v0.1 (2026-11-23) — to be agreed in P0 (Okey + Paul).
+> **Status:** DRAFT v0.2 (2026-11-24) — to be agreed in P0 (Okey + Paul).
 > **Source of truth for existing endpoints:** `ems1000-staging/src/api/main.py` (API v1.1.0). This doc describes how the **app** uses them and what's **new**.
+>
+> **v0.2** (after the [engineering review](../plan/mobile-app-plan.md#14-engineering-review--what-we-adopted-and-when)): status rule split (data age vs connection), push-token ownership rule, start/stop direct-method-only rule ([decision 0011](../decisions/README.md)), backend tests for the link check and command endpoint.
 
 ## At a glance
 
@@ -70,6 +72,12 @@ Every `/api/devices/{id}/…` call from a **signed-in person** checks the `UserD
 
 `role` is stored but **not enforced in the pilot** (decision 0005). Linking is done with `scripts/link_user_device.py` in `ems1000-staging`.
 
+🧪 **Required backend tests (P1)**, in `ems1000-staging/src/api/tests/`:
+- linked Entra user → `/state` 200, `/command` passes through
+- unlinked Entra user → `/state` and `/command` 403, and **no** direct method is sent
+- API-key caller → allowed
+- every `/command` call writes one `CommandLog` row, including refusals and timeouts
+
 ---
 
 ## Endpoint details
@@ -107,7 +115,8 @@ Summary fields come from the same `DeviceState` row as `/state`, so the list nee
 | App element | Field(s) | Rule |
 |---|---|---|
 | 🟢🟡🔴 State chip | `status.run_state`, `status.faults` | Running = green · Cranking/Stopping = amber · Fault = red · Off = grey |
-| 📶 Offline badge | `age_s`, `link.connection_status` | **Offline** if `connection_status == "Offline"` or `age_s > 180` (3 heartbeats); shows "updated X ago" |
+| 🕒 Data age | `age_s` | Always shows "updated X ago". Text turns grey when `age_s > 150` (2.5 heartbeats). **Never disables commands** |
+| 📶 Offline badge | `link.connection_status` | **Offline** badge only when `connection_status == "Offline"` (from IoT Hub). This alone decides whether Start/Stop are enabled |
 | ⛽ Fuel tile | `readings.fuel` | % with bar; amber below 25, red below 10 (display only — device decides the fault) |
 | 🛢️ Oil tile | `readings.oil_state` | ok / low / critical |
 | 🌡️ Temp tile | `readings.t` | °C |
@@ -135,7 +144,14 @@ Replies (mirrors the device):
 
 🆕 Every call (any result) writes a `CommandLog` row: who, device, command, HTTP status, device reply, time. Not shown in the pilot app.
 
-**App rules:** Start/Stop buttons are **disabled** when offline, when a command is in flight, or when the state makes them meaningless (Start while Running, Stop while Off). A confirm dialog comes before Start and Stop. No commands are queued while offline (decision 0008).
+**App rules:**
+- Start/Stop are **disabled** when the device is Offline (connection status), while a command is in flight, or when the state makes them meaningless (Start while Running/Cranking/Fault, Stop while Off).
+- In **Fault**, Start is replaced by **Reset fault**. The fault reason is shown, and a 409 on reset means "condition still present".
+- After a 200 on Start, the app shows *Starting…* and polls `/state`. **Running** = success; **Fault** or still **Off** after 30 s = "Start failed", with the reason.
+- A confirm dialog comes before Start and Stop.
+- No commands are queued while offline (decision 0008). No automatic retries.
+
+🔒 **Start/stop only as direct methods** ([decision 0011](../decisions/README.md)). Direct methods fail within 15 s if the device isn't connected, so a command can never be delivered late. Start/stop must **never** be sent as a device-twin desired property or a cloud-to-device message, because both are delivered whenever the device reconnects, possibly much later.
 
 ### 🆕 `GET /api/devices/{id}/history?hours=24`
 Downsampled for small payloads (one point per 5 minutes = up to 288 points):
@@ -178,7 +194,11 @@ Why new: `/telemetry` returns at most 500 raw messages, which isn't 24 h at a 60
 ```json
 { "token": "ExponentPushToken[xxxxxxxx]", "platform": "android", "app_version": "0.1.0" }
 ```
-Called after sign-in and whenever Expo issues a new token; `DELETE` on sign-out. Tokens that Expo reports as invalid are removed automatically.
+Called after sign-in and whenever Expo issues a new token; `DELETE` on sign-out.
+
+**Ownership rule (pilot):** `PushTokens` uses the **token as its key** (RowKey = token, plus owner `oid`). One phone token belongs to exactly one user. A `POST` from a different user **moves** the token to them, so if someone signs in on another person's phone, alerts follow the person now signed in.
+
+*Deferred to pre-MVP:* handling sign-out while offline (DELETE never arrives) and removing tokens Expo reports as invalid.
 
 ---
 
@@ -196,5 +216,5 @@ All of these read Table Storage, not the device, so they **don't use the IoT Hub
 
 ## Open points for P0
 - [ ] Paul: confirm fault bits and `rule` names match firmware.
-- [ ] Confirm the 180 s offline threshold against the heartbeat interval (60 s).
+- [ ] Confirm the 150 s "data is old" threshold against the heartbeat interval (60 s) and real ingest delay.
 - [ ] Device nickname: set at link time (script) or editable in app later?

@@ -72,7 +72,14 @@ Everything goes through the API. That gives us one place to:
 
 ### 4. "Fresh" vs "stale" is just arithmetic
 
-The API returns `age_s`, the seconds since the last reading, plus `connection_status` (Online/Offline, from IoT Hub). The app shows **Offline** when the device says so or when `age_s` is over 180 (3 missed heartbeats).
+The API returns two separate facts, and the app uses them for different things:
+
+| Fact | Comes from | App shows | Controls Start/Stop? |
+|---|---|---|---|
+| `age_s`: seconds since the last reading | Table Storage | "updated X ago" (greys after 150 s) | ❌ No |
+| `connection_status`: Online / Offline | IoT Hub connect/disconnect events | **Offline** badge | ✅ Yes: disabled when Offline |
+
+Why separate? Old data can mean a slow pipeline while the device is still connected, and commands would still work. A disconnected device can't take commands at all.
 
 ### 5. Messages cost money; reads don't
 
@@ -96,6 +103,7 @@ IoT Hub's free tier allows ~8,000 device messages a day, and the simulator has a
 - **"Start returned 409."** The device refused for safety (e.g. low oil). Working as designed; the reason is in the reply.
 - **Times look an hour off.** The API replies in WAT (UTC+1); storage is UTC. The app converts for display.
 - **Testing with `?live=true` in a loop** burns the daily IoT Hub message budget.
+- **Sending start/stop any other way than a direct method** (e.g. a device-twin setting) means it could fire when the device reconnects, possibly much later. Not allowed ([decision 0011](../decisions/README.md)).
 
 ## 📖 Go deeper
 

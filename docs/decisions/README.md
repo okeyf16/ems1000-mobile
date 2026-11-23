@@ -14,6 +14,8 @@ Short records of choices that would be costly to reverse. New decisions: copy [`
 | 0008 | 2026-11-22 | **Connectivity:** last-known state + offline badge; commands disabled when offline; no queued commands (safety) | ✅ Accepted | — |
 | 0009 | 2026-11-22 | **App = user features, web panel = admin** (fault injection, all-devices view, linking) | ✅ Accepted | — |
 | 0010 | 2026-11-22 | **Engineer review approach** | ⏳ Open — decide before MVP | MVP gate |
+| 0011 | 2026-11-24 | **Start/stop only as IoT Hub direct methods**, never via device-twin desired properties or cloud-to-device messages | ✅ Accepted | — |
+| 0012 | 2026-11-24 | **Engineering review adopted in three tiers**: pilot now / pre-MVP / pre-prod (see plan §14) | ✅ Accepted | Each gate |
 
 ## Why each was chosen (one line each)
 
@@ -26,3 +28,5 @@ Short records of choices that would be costly to reverse. New decisions: copy [`
 - **0007** — Expo Push is free and needs no extra Azure service for the pilot; Azure Notification Hubs can replace it at scale.
 - **0008** — A start command that fires late (after reconnecting) could start a generator when nobody expects it.
 - **0009** — Keeps the customer app simple and lowers the risk of shipping admin powers to customers.
+- **0011** — Direct methods fail within 15 s if the device is offline, so a start can never arrive late. Twin properties and cloud-to-device messages wait and are delivered on reconnect, possibly much later, which is unsafe for a generator.
+- **0012** — The pilot is internal with a simulated device. Only changes that make it unsafe, unreliable or misleading to test without are done now; the rest are gate items for MVP or Prod batch 1.
