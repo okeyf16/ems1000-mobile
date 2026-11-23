@@ -1,9 +1,11 @@
 # 🔌 Pilot API contract — app ↔ EMS-1000 API
 
-> **Status:** DRAFT v0.2 (2026-11-24) — to be agreed in P0 (Okey + Paul).
+> **Status:** DRAFT v0.3 (2026-11-24) — to be agreed in P0 (Okey + Paul).
 > **Source of truth for existing endpoints:** `ems1000-staging/src/api/main.py` (API v1.1.0). This doc describes how the **app** uses them and what's **new**.
 >
-> **v0.2** (after the [engineering review](../plan/mobile-app-plan.md#14-engineering-review--what-we-adopted-and-when)): status rule split (data age vs connection), push-token ownership rule, start/stop direct-method-only rule ([decision 0011](../decisions/README.md)), backend tests for the link check and command endpoint.
+> **v0.2** (after the [engineering review](../plan/mobile-app-plan.md#14-engineering-reviews--what-we-adopted-and-when)): status rule split (data age vs connection), push-token ownership rule, start/stop direct-method-only rule ([decision 0011](../decisions/README.md)), backend tests for the link check and command endpoint.
+>
+> **v0.3** (second review): `command_id` on every command; request timeout and phone-side age counting, so "updated X ago" can't freeze.
 
 ## At a glance
 
@@ -126,11 +128,17 @@ Summary fields come from the same `DeviceState` row as `/state`, so the list nee
 
 Times arrive in **WAT (UTC+1)**; the app shows them as relative time ("2 min ago") and local clock time.
 
+**"Updated X ago" can't freeze** (v0.3):
+- `age_s` is calculated by the **server**, so the phone's clock doesn't matter.
+- Between polls, the app adds the time since its last *successful* response (measured on the phone's own timer) to `age_s`. If polls fail or hang, the number keeps growing instead of staying stuck.
+- Every request has a **10 s timeout**. After two failed polls in a row, the screen shows "Can't reach server — showing last known data".
+
 ### 🔧 `POST /api/devices/{id}/command`
-Request (existing shape):
+Request (existing shape + 🆕 `command_id`):
 ```json
-{ "command": "start" }        // start | stop | reset_fault
+{ "command": "start", "command_id": "3f2a9c1e-…" }   // start | stop | reset_fault
 ```
+🆕 `command_id` is a UUID the app creates for each tap. The API passes it to the device (today it generates its own random ID) and stores it in `CommandLog`, so each tap can be traced to its log row and device reply. Optional for API-key callers. **Pilot: correlation only.** Ignoring repeated IDs is a pre-MVP item.
 Replies (mirrors the device):
 
 | HTTP | Meaning | App shows |

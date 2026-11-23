@@ -1,8 +1,8 @@
-# 🗺️ EMS-1000 Mobile App — Plan v1.2
+# 🗺️ EMS-1000 Mobile App — Plan v1.3
 
 | | |
 |---|---|
-| **Agreed** | 2026-11-22 (v1.0) · updated 2026-11-23 (v1.1) · 2026-11-24 (v1.2) |
+| **Agreed** | 2026-11-22 (v1.0) · updated 2026-11-23 (v1.1) · 2026-11-24 (v1.2, v1.3) |
 | **Owner** | Okey |
 | **Status** | P0 in progress — docs first, then repo setup and mockups |
 | **Related** | [API contract](../api/pilot-api-contract.md) · [Decisions](../decisions/README.md) · simulator plan (`ems1000-device-sim`) |
@@ -14,9 +14,13 @@ Replaces the Kivy prototype (`iotgenmobile`) with an Expo / React Native app tha
 - The API already has `/state` (with `age_s` and `connection_status` for the offline badge), `/command`, `/alerts` and `/whoami`. New backend work is smaller: link check, command log, `/me/*`, push, 24 h history.
 - Fault alerts are raised in the existing `telemetry_ingest` Function (compare `flt` with the previous message), not in a separate Function.
 
-**v1.2 changes** (after an external engineering review; details in [§14](#14-engineering-review--what-we-adopted-and-when)):
+**v1.2 changes** (after an external engineering review; details in [§14](#14-engineering-reviews--what-we-adopted-and-when)):
 - Pilot adds about 1 day: custom test build (dev client), split status rule, push-token ownership, Sentry, backend tests, decision 0011.
 - Everything else from the review becomes a checklist item for the MVP and Prod batch 1 gates.
+
+**v1.3 changes** (after a second engineering review; details in [§14](#14-engineering-reviews--what-we-adopted-and-when)):
+- Pilot adds about 0.5 day: custom test build moved to P0, command ID on every command, request timeout + "updated X ago" counted on the phone, tech baseline (TypeScript strict, TanStack Query, SecureStore), Sentry latency tracking.
+- **New pre-MVP blocker:** a real-hardware test gate on a physical EMS-1000. MVP timing now depends on Paul's first working unit.
 
 ---
 
@@ -140,6 +144,7 @@ ems1000-mobile/
 - `main` protected → branch → PR → CI passes → merge ([L7](../learning/L7-git-workflow.md)).
 - **EAS Build** makes the Android app in the cloud; **EAS Update** ships small fixes over the air.
 - Secrets (API URL, Entra client IDs) in EAS/GitHub secrets — never in the repo.
+- **Tech baseline (from P0):** TypeScript strict mode · TanStack Query for all API calls and polling · sign-in tokens in Expo SecureStore (never plain storage) · Sentry for crashes + basic latency · **custom test build (Expo dev client), not Expo Go**, because Expo Go can't run Entra sign-in or push.
 - **Accounts needed:** Expo (free) · Google Play Console ($25, by P4) · Firebase project (free, Android push) · Entra app registration for the mobile client.
 
 ---
@@ -177,22 +182,23 @@ One page per topic in [`docs/learning/`](../learning/README.md): diagram first, 
 
 ---
 
-## 9. Pilot milestones (~16–19 working days)
+## 9. Pilot milestones (~16–20 working days)
 
 | # | Days | Deliverable | Done when |
 |---|---|---|---|
-| **P0** | 1–2 | Docs (this set) · Expo project + CI skeleton · API contract agreed · clickable mockups | Owner approves screens, Paul approves contract |
-| **P1** | 3–6 | Backend: Entra token for the app (scope + audience), `UserDevices` link check, `CommandLog`, `/api/me/devices`, linking script · 🧪 tests for link check + command endpoint · L3 | API refuses unlinked users (tested); every command logged |
-| **P2** | 5–11 | 🔧 Custom test build (Expo dev client) on the owner's phone · App: sign-in, My generators, Generator detail with "updated X ago" + Offline badge (connection status), start/stop/reset with confirm, Start blocked in flight / in Fault, start verified by polling · 🐞 Sentry crash reporting · L2, L4 | Owner starts/stops `ems-sim-01` from his phone; a failed crank shows as "Start failed" with the reason |
-| **P3** | 11–15 | Fault detection in `telemetry_ingest` → Alerts row + Expo push; alerts screen; alert prefs; push tokens (one owner per token) · L5 | A simulator fault scenario puts a notification on the phone |
-| **P4** | 15–19 | `/history` + 24 h chart · internal Play build to Paul & Emeka · Kivy + legacy endpoints retired · L6, L8 | Paul and Emeka install and use it |
+| **P0** | 1–3 | Docs (this set) · Expo project + CI skeleton with the tech baseline (§6) · 🔧 custom test build installed on the owner's phone · API contract agreed · clickable mockups | Owner approves screens, Paul approves contract; skeleton app opens on the owner's phone |
+| **P1** | 3–6 | Backend: Entra token for the app (scope + audience), `UserDevices` link check, `CommandLog` (with the app's `command_id`), `/api/me/devices`, linking script · 🧪 tests for link check + command endpoint · L3 | API refuses unlinked users (tested); every command logged |
+| **P2** | 5–12 | App: sign-in, My generators, Generator detail with "updated X ago" + Offline badge (connection status), start/stop/reset with confirm, Start blocked in flight / in Fault, start verified by polling, `command_id` on every command, 10 s request timeout with "updated X ago" counted on the phone · 🐞 Sentry · L2, L4 | Owner starts/stops `ems-sim-01` from his phone; a failed crank shows as "Start failed" with the reason |
+| **P3** | 12–16 | Fault detection in `telemetry_ingest` → Alerts row + Expo push; alerts screen; alert prefs; push tokens (one owner per token) · L5 | A simulator fault scenario puts a notification on the phone |
+| **P4** | 16–20 | `/history` + 24 h chart · internal Play build to Paul & Emeka · Kivy + legacy endpoints retired · L6, L8 | Paul and Emeka install and use it |
 
 **Fallback:** if short on time, P3 ships with alerts on/off for all users; per-alert toggles follow.
 
 **Pilot exit checklist**
 - [ ] All P0–P4 done criteria met
 - [ ] No secrets in the repo
-- [ ] Command log verified (success, refusal, timeout)
+- [ ] Command log verified (success, refusal, timeout); each row carries the app's `command_id`
+- [ ] API hang test (block the API URL): "updated X ago" keeps counting up and a "Can't reach server" notice appears; the app never looks live
 - [ ] Offline badge tested with the simulator stopped (IoT Hub → Offline, Start/Stop disabled); airplane mode shows last data with "updated X ago"
 - [ ] Failed crank (sim low-battery scenario) shows "Start failed" and blocks Start until reset
 - [ ] Fault → push tested for oil, temperature, fuel, crank, device offline
@@ -259,12 +265,13 @@ Options: (a) fractional senior engineer at gates · (b) independent AI review on
 - Simulator M2 (state machine + direct methods incl. `reset_fault`) → needed for P2
 - Simulator M3 (fault injection, YAML scenarios) → needed for P3
 - Firmware (Paul): `reset_fault`, non-blocking method handler, `oil=2` for critical
+- **Paul's first working EMS-1000 unit, connected to IoT Hub over cellular → needed for the pre-MVP real-hardware gate (§14)**
 
 ---
 
-## 14. Engineering review — what we adopted, and when
+## 14. Engineering reviews — what we adopted, and when
 
-An external engineering review (2026-11-23) scored the plan 8.2/10. Self-assessment: ~7.5/10. The rule for adopting its points ([decision 0012](../decisions/README.md)): **the pilot is internal with a simulated device, so only do now what would make it unsafe, unreliable or misleading to test without.**
+Two external engineering reviews: **review 1** (2026-11-23, 8.2/10, self-assessed ~7.5) and **review 2** (2026-11-24, 8.1/10; it reviewed v1.1, so several of its points were already covered by v1.2). Self-assessment after both: **~8/10**. The rule for adopting its points ([decision 0012](../decisions/README.md)): **the pilot is internal with a simulated device, so only do now what would make it unsafe, unreliable or misleading to test without.**
 
 ### Not adopted
 
@@ -275,8 +282,11 @@ An external engineering review (2026-11-23) scored the plan 8.2/10. Self-assessm
 | Command expiry (TTL) for late delivery | Direct methods can't be delivered late; made a rule instead (decision 0011) |
 | Alert toggles stored on the phone | Already server-side (`/api/me/alert-prefs`) |
 | Real-time transport unspecified | Already specified: polling for the pilot, SignalR at full scale. Switch triggers added to the pre-prod gate |
+| (Review 2) Poll every 5–10 s | The device reports every ~60 s (plus on change); polling faster than 15 s only uses more mobile data |
+| (Review 2) Keep Kivy until the real-hardware gate | Kivy uses legacy endpoints nobody else depends on; retiring it in P4 is safe |
+| (Review 2) Client-side clock maths for staleness | Already avoided: the API calculates `age_s` on the server, so the phone's clock doesn't matter |
 
-### ✅ Now: in the pilot (~+1 day, already in §9)
+### ✅ Now: in the pilot (~+1.5 days total, already in §9)
 
 - [ ] Custom test build (Expo dev client): Entra sign-in and push don't work in Expo Go
 - [ ] Decision 0011: start/stop only as direct methods
@@ -285,10 +295,16 @@ An external engineering review (2026-11-23) scored the plan 8.2/10. Self-assessm
 - [ ] Sentry crash reporting
 - [ ] Backend tests: link check (403, no command sent) and command endpoint (one log row per call)
 - [ ] Clear lockout/fault handling; Start blocked while a command is in flight or in Fault; start verified by polling
+- [ ] *(Review 2)* Custom test build set up in **P0**, not P2
+- [ ] *(Review 2)* App attaches a `command_id` (UUID) to every command; the API passes it to the device and stores it in `CommandLog` (correlation only; no duplicate filtering yet)
+- [ ] *(Review 2)* 10 s timeout on every request; "updated X ago" counts up on the phone between successful updates, so a hung API can't look live
+- [ ] *(Review 2)* Tech baseline: TypeScript strict, TanStack Query, SecureStore for tokens, Sentry latency tracking
+- [ ] *(Review 2)* "How fresh is the data" box in L1 (polling intervals, server-side chart downsampling)
 
 ### 🚧 Pre-MVP gate: before real generators and non-team users
 
-- [ ] Duplicate-proof key on commands (`Idempotency-Key` → passed to the device as `command_id`; API ignores repeats for ~60 s)
+- [ ] 🔴 **Real-hardware test gate (blocker):** on a physical EMS-1000 over cellular, measure command delay (tap → Running), recovery after signal drops, push delivery time, failed-crank and lockout behaviour. Pass criteria to be agreed with Paul
+- [ ] Duplicate filtering: API ignores a repeated `command_id` for ~60 s and returns the first result
 - [ ] `CommandLog` records the verified outcome: running / crank failed / no reply
 - [ ] Full push-token lifecycle: sign-out while offline, removing tokens Expo reports invalid
 - [ ] Last-known data kept on the phone (TanStack Query + persisted cache) so it shows instantly with no signal
@@ -296,6 +312,8 @@ An external engineering review (2026-11-23) scored the plan 8.2/10. Self-assessm
 - [ ] App types generated from the API's `openapi.json`; CI checks the contract, Markdown and links, and renders the diagrams
 - [ ] Automated tests for critical app screens (status display, Start/Stop rules)
 - [ ] Engineer review decision (decision 0010)
+- [ ] *(Review 2)* API returns `stale_after_s` with `/state`, so the threshold can change without an app update
+- [ ] *(Review 2)* One-page `SECURITY.md` / threat model: who can do what, server-side device-access check, push-token removal on sign-out
 
 ### 🏭 Pre-prod gate: before Prod batch 1 (100+ paying users)
 

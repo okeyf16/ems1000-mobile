@@ -81,7 +81,20 @@ The API returns two separate facts, and the app uses them for different things:
 
 Why separate? Old data can mean a slow pipeline while the device is still connected, and commands would still work. A disconnected device can't take commands at all.
 
-### 5. Messages cost money; reads don't
+### 5. How fresh is the data?
+
+| What | How often | Why that number |
+|---|---|---|
+| Device sends a reading | every ~60 s, plus instantly on a state change (start, stop, fault) | Simulator/firmware heartbeat |
+| App asks for state (detail screen open) | every 15 s | Faster than the device reports gains nothing and uses mobile data |
+| App asks for state (list screen open) | every 30 s | Overview only |
+| After you tap Start/Stop | every 3 s for up to 30 s | To see Cranking → Running (or a failure) quickly |
+| 24 h chart | on open, then every 5 min | Server sends one point per 5 min (≤ 288 points), never raw readings |
+| App in background | no polling | Saves battery and data; push alerts still arrive |
+
+"Updated X ago" is worked out from the server's `age_s` and keeps counting up on the phone if updates stop arriving, so a stuck connection can't look live.
+
+### 6. Messages cost money; reads don't
 
 IoT Hub's free tier allows ~8,000 device messages a day, and the simulator has a budget guard. The app's polling reads **tables**, which costs practically nothing. That's why the app avoids `?live=true` (which phones the device).
 
