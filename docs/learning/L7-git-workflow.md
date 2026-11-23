@@ -33,7 +33,7 @@ flowchart LR
 2. **One branch = one change.** Name it by type: `feat/…` (new feature), `fix/…` (bug), `docs/…`, `chore/…` (tooling).
 3. **The PR is the conversation.** It shows exactly what changed, why, and how to test it. Your job as tester: install the build or preview, try it, then approve or comment.
 4. **CI is the robot reviewer.** On every PR, GitHub Actions runs type-check, lint and tests. Red = don't merge.
-5. **Commit messages say what and why:** `feat: show offline badge when age_s > 180`, not `update`.
+5. **Commit messages say what and why:** `feat: grey out "updated X ago" after 150 s`, not `update`.
 
 ## 🧭 What you'd touch
 
